@@ -1,0 +1,98 @@
+# This workflow uses actions that are not certified by GitHub.
+# They are provided by a third-party and are governed by
+# separate terms of service, privacy policy, and support
+# documentation.
+
+### The OpenShift Starter workflow will:
+# - Log in to your OpenShift cluster
+# - Deploy a simple hello-world app
+
+### Before you begin:
+# - Have access to an OpenShift cluster.
+#   - For instructions to get started with OpenShift see https://www.openshift.com/try
+
+### To get the workflow running:
+# 1. Add this workflow to your repository.
+# 2. Edit the top-level 'env' section, which contains a list of environment variables that must be configured.
+# 3. Create the secrets referenced in the 'env' section under your repository Settings.
+# 4. Edit the 'branches' in the 'on' section to trigger the workflow on a push to your branch.
+# 5. Commit and push your changes.
+
+# For a more sophisticated example, see https://github.com/redhat-actions/spring-petclinic/blob/main/.github/workflows/petclinic-sample.yaml
+# Also see our GitHub organization, https://github.com/redhat-actions/
+
+name: OpenShift
+
+# ⬇️  Modify the fields marked with ⬇️ to fit your project, and create any secrets that are referenced.
+# https://docs.github.com/en/free-pro-team@latest/actions/reference/encrypted-secrets
+env:
+  # ⬇️ EDIT to log into your OpenShift cluster and set up the context.
+  # See https://github.com/redhat-actions/oc-login#readme for how to retrieve these values.
+  OPENSHIFT_SERVER: ${{ secrets.OPENSHIFT_SERVER }}
+  OPENSHIFT_TOKEN: ${{ secrets.OPENSHIFT_TOKEN }}
+
+  # ⬇️ EDIT if you wish to set the kube context's namespace after login. Leave blank to use the default namespace.
+  OPENSHIFT_NAMESPACE: ""
+  
+  DEPLOY_CONFIG: "https://raw.githubusercontent.com/ocp-power-demos/hello-world/main/deploy.yaml"
+  
+  APP_NAME: "hello-world"
+
+on:
+  # https://docs.github.com/en/free-pro-team@latest/actions/reference/events-that-trigger-workflows
+  push:
+    # Edit to the branch(es) you want to build and deploy on each push.
+    branches: [ main ]
+
+jobs:
+  openshift-cd:
+    name: Deploy to OpenShift
+    runs-on: ubuntu-20.04
+
+    steps:
+    # oc-login works on all platforms, but oc must be installed first.
+    # The GitHub Ubuntu runner already includes oc.
+    # Otherwise, https://github.com/redhat-actions/oc-installer#readme is available.
+
+    # https://github.com/redhat-actions/oc-login#readme
+    - name: Log in to OpenShift
+      uses: redhat-actions/oc-login@v1
+      with:
+        openshift_server_url: ${{ env.OPENSHIFT_SERVER }}
+        openshift_token: ${{ env.OPENSHIFT_TOKEN }}
+        insecure_skip_tls_verify: true
+        namespace: ${{ env.OPENSHIFT_NAMESPACE }}
+
+    # This step should create a deployment, service, and route to run your app and expose it to the internet.
+    # Feel free to replace this with 'oc apply', 'helm install', or however you like to deploy your app.
+    - name: Create and expose app
+      run: |
+        
+        export SELECTOR="app=${{ env.APP_NAME }}"
+        echo "SELECTOR=$SELECTOR" >> $GITHUB_ENV
+
+        set -x
+        
+        
+        # Show cluster info
+        oc get nodes -o wide
+
+        # Take down any old deployment
+        oc delete -f ${{ env.DEPLOY_CONFIG }}
+        
+        # Deploy
+        oc create -f ${{ env.DEPLOY_CONFIG }}
+             
+        oc get all --selector="$SELECTOR"
+        set +x
+        
+        export ROUTE="$(oc get route $APP_NAME -o jsonpath='{.spec.host}')"
+        echo "$APP_NAME is exposed at $ROUTE"
+        echo "ROUTE=$ROUTE" >> $GITHUB_ENV
+
+    - name: View application route
+      run: |
+        [[ -n ${{ env.ROUTE }} ]] || (echo "Determining application route failed in previous step"; exit 1)
+        echo "======================== Your application is available at: ========================"
+        echo ${{ env.ROUTE }}
+        echo "==================================================================================="
